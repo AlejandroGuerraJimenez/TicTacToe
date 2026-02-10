@@ -16,7 +16,6 @@ export function buildApp() {
   
   // Habilitar CORS
   app.register(cors, {origin: '*'}); 
-
   // Ruta POST para el registro
   app.post('/register', async (request, reply) => {
 
