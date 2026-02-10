@@ -1,18 +1,17 @@
-# TicTacToe
+# Backend
 
-### Minimun requirements for the proyect
+## Installation & Setup
 
-##### Backend
+```bash
+npm install
+npm run build
+npm start
+```
 
-- User
-- Friend Request / Friendship
-- Game
-- Chat  Message
+## Development
 
-##### Frontend
+For development with hot-reload:
 
-- Authentication (login / register)
-- Dashboard
-- Friends
-- Game
-- Chat 
+```bash
+npm run dev
+```
