@@ -138,6 +138,11 @@ export async function gamesRoutes(server: FastifyInstance) {
         status: 'PENDING',
       });
 
+      notifyUser(targetUser.id, 'game_invitation', {
+        senderId,
+        senderName: request.user.username,
+      });
+
       return reply.status(200).send({ success: true, message: 'Invitación enviada' });
     } catch (error) {
       server.log.error(error);
@@ -170,12 +175,7 @@ export async function gamesRoutes(server: FastifyInstance) {
         return reply.status(404).send({ success: false, error: 'Invitación no encontrada o ya usada' });
       }
 
-      await db
-        .update(gameInvitations)
-        .set({ status: 'ACCEPTED' })
-        .where(eq(gameInvitations.id, id));
-
-      await db.insert(games).values({
+      const [newGame] = await db.insert(games).values({
         playerXId: inv.senderId,
         playerOId: inv.receiverId,
         boardState: INITIAL_BOARD,
@@ -183,6 +183,13 @@ export async function gamesRoutes(server: FastifyInstance) {
         status: 'ACTIVE',
         chatId: null,
         winnerId: null,
+      }).returning({ id: games.id });
+
+      await db.delete(gameInvitations).where(eq(gameInvitations.id, id));
+
+      notifyUser(inv.senderId, 'game_invitation_accepted', {
+        gameId: newGame.id,
+        opponentUsername: request.user.username,
       });
 
       return reply.status(200).send({ success: true, message: 'Partida creada' });
@@ -192,7 +199,7 @@ export async function gamesRoutes(server: FastifyInstance) {
     }
   });
 
-  // POST /games/invitations/:id/reject — rechazar invitación
+  // POST /games/invitations/:id/reject — rechazar invitación (se borra de la BD)
   server.post('/invitations/:id/reject', async (request, reply) => {
     const id = Number((request.params as { id: string }).id);
     const userId = request.user.id;
@@ -203,8 +210,7 @@ export async function gamesRoutes(server: FastifyInstance) {
 
     try {
       const result = await db
-        .update(gameInvitations)
-        .set({ status: 'REJECTED' })
+        .delete(gameInvitations)
         .where(
           and(
             eq(gameInvitations.id, id),
