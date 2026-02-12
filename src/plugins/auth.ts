@@ -9,6 +9,7 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
     try {
         await request.jwtVerify();
     } catch (err) {
-        reply.send(err);
+        // Re-lanzar para que Fastify no ejecute el handler (evita request.user undefined y doble respuesta)
+        throw err;
     }
 }

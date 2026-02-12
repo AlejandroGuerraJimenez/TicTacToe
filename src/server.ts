@@ -8,6 +8,8 @@ import { eq } from 'drizzle-orm';
 import { Pool } from 'pg';
 import { users } from './db/schema';
 import { authenticate } from './plugins/auth';
+import { realtimePlugin } from './plugins/realtime';
+import { friendsRoutes } from './routes/friends';
 import 'dotenv/config';
 
 // Define custom types for JWT
@@ -26,9 +28,9 @@ const db = drizzle(pool);
 
 // 2. Registro de plugins
 server.register(cors, {
-  // Ajusta este origin al puerto real del frontend (por defecto Angular: 4200)
   origin: 'http://localhost:4200',
   credentials: true,
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
 });
 
 server.register(jwt, {
@@ -43,7 +45,10 @@ server.register(cookie, {
   secret: process.env.COOKIE_SECRET || 'cookie-secret',
 });
 
-// 3. Ruta de registro
+server.register(realtimePlugin);
+
+server.register(friendsRoutes, { prefix: '/friends' });
+
 server.post('/register', async (request, reply) => {
   const { username, email, password } = request.body as any;
 
@@ -139,12 +144,7 @@ server.post('/logout', async (_request, reply) => {
   return reply.status(200).send({ success: true });
 });
 
-// 7. Ruta de prueba
-server.get('/ping', async () => {
-  return { pong: 'it works!' };
-});
-
-// 8. Arranque del servidor
+// 7. Arranque del servidor
 const start = async () => {
   try {
     await server.listen({ port: 3000, host: '0.0.0.0' });
