@@ -52,7 +52,20 @@ server.register(friendsRoutes, { prefix: '/friends' });
 server.register(gamesRoutes, { prefix: '/games' });
 
 server.post('/register', async (request, reply) => {
-  const { username, email, password } = request.body as any;
+  const body = request.body as any;
+  const username = typeof body?.username === 'string' ? body.username.trim() : '';
+  const email = typeof body?.email === 'string' ? body.email.trim() : '';
+  const password = typeof body?.password === 'string' ? body.password : '';
+
+  if (!username || username.length < 4) {
+    return reply.status(400).send({ success: false, error: 'El nombre de usuario es obligatorio (mín. 2 caracteres)' });
+  }
+  if (!email) {
+    return reply.status(400).send({ success: false, error: 'El correo electrónico es obligatorio' });
+  }
+  if (!password || password.length < 6) {
+    return reply.status(400).send({ success: false, error: 'La contraseña es obligatoria (mín. 6 caracteres)' });
+  }
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -62,25 +75,24 @@ server.post('/register', async (request, reply) => {
       password: hashedPassword
     }).returning();
 
-    // No devolvemos el password al cliente
     const { password: _pw, ...safeUser } = newUser[0];
-
-    // Generamos JWT
     const token = server.jwt.sign({ id: safeUser.id, username: safeUser.username, email: safeUser.email });
 
-    // Guardamos en cookie httpOnly
     reply.setCookie('token', token, {
       path: '/',
       httpOnly: true,
       sameSite: 'lax',
-      secure: false, // true en prod con HTTPS
-      maxAge: 60 * 60 * 24 * 7, // 7 días
+      secure: false,
+      maxAge: 60 * 60 * 24 * 7,
     });
 
-    return reply.status(201).send({ success: true, user: safeUser, token }); // Devolvemos token también por si acaso
-  } catch (error) {
+    return reply.status(201).send({ success: true, user: safeUser, token });
+  } catch (error: any) {
     server.log.error(error);
-    return reply.status(500).send({ success: false, error: 'Registration failed' });
+    if (error?.code === '23505') {
+      return reply.status(409).send({ success: false, error: 'El nombre de usuario o el correo ya están en uso' });
+    }
+    return reply.status(500).send({ success: false, error: 'Error al crear la cuenta. Inténtalo de nuevo.' });
   }
 });
 
