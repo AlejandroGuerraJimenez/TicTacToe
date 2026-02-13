@@ -27,9 +27,10 @@ const server = Fastify({ logger: true });
 
 // 2. Registro de plugins
 server.register(cors, {
-  origin: 'http://localhost:4200',
+  origin: true, // permite cualquier origen (refleja el Origin de la petición; compatible con credentials)
   credentials: true,
-  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
 });
 
 server.register(jwt, {
