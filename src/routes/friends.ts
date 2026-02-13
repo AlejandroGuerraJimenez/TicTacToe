@@ -1,17 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { authenticate } from '../plugins/auth';
 import { notifyUser } from '../plugins/realtime';
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
 import { users, friendships, friendRequests } from '../db/schema';
+import { db } from '../db/connection';
 import { eq, and, or } from 'drizzle-orm';
-import 'dotenv/config';
-
-// Reutilizamos la conexión (idealmente inyectada, pero por simplicidad la creamos aquí o la importamos si exportaras db)
-// Para mantener consistencia con server.ts, mejor crear una nueva instancia o pasarla como plugin options. 
-// Por ahora, instanciamos aquí para no refactorizar todo server.ts.
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
 
 export async function friendsRoutes(server: FastifyInstance) {
 

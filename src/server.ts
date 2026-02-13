@@ -3,10 +3,9 @@ import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
 import bcrypt from 'bcrypt';
-import { drizzle } from 'drizzle-orm/node-postgres';
 import { eq } from 'drizzle-orm';
-import { Pool } from 'pg';
 import { users } from './db/schema';
+import { db } from './db/connection';
 import { authenticate } from './plugins/auth';
 import { realtimePlugin } from './plugins/realtime';
 import { friendsRoutes } from './routes/friends';
@@ -23,9 +22,7 @@ declare module '@fastify/jwt' {
 
 const server = Fastify({ logger: true });
 
-// 1. Configuración de la base de datos (Traído de app.ts)
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
+// 1. Base de datos: una sola instancia compartida (véase db/connection.ts)
 
 // 2. Registro de plugins
 server.register(cors, {

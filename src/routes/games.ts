@@ -1,9 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { authenticate } from '../plugins/auth';
 import { notifyUser } from '../plugins/realtime';
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
 import { users, games, gameInvitations, chats, messages, friendships } from '../db/schema';
+import { db } from '../db/connection';
 import { eq, and, desc, or } from 'drizzle-orm';
 
 async function deleteGameChat(
@@ -15,10 +14,6 @@ async function deleteGameChat(
   await db.delete(messages).where(eq(messages.chatId, chatId));
   await db.delete(chats).where(eq(chats.id, chatId));
 }
-import 'dotenv/config';
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const db = drizzle(pool);
 
 const INITIAL_BOARD = '---------';
 
