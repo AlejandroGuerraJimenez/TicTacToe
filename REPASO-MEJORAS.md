@@ -9,9 +9,9 @@
    - Antes: `server.ts`, `routes/friends.ts` y `routes/games.ts` creaban cada uno su propio `new Pool()` y `drizzle(pool)`.
    - **Solución**: Se creó `src/db/connection.ts` con una única instancia de `Pool` y `db`; `server.ts` y las rutas importan `db` desde ahí.
 
-2. **GET /games — Dos consultas en lugar de una** // IMPLEMENTAR
-   - Se hacen dos queries: una para partidas como X y otra como O, y luego se fusionan en memoria.
-   - **Mejora**: Una sola query con `where(or(eq(games.playerXId, userId), eq(games.playerOId, userId)))` y un join con `users` para el oponente (usando `case when` o dos joins laterales si hace falta el username según el rol). Reduce round-trips a la BD.
+2. **GET /games — Dos consultas en lugar de una** ✅ Implementado
+   - Antes: dos queries (partidas como X y como O) y fusión en memoria.
+   - **Solución**: Una sola query con `or(eq(games.playerXId, userId), eq(games.playerOId, userId))`, dos alias de `users` (userX, userO) para join con ambos jugadores, y mapeo en JS para opponentId, opponentUsername y mySymbol según el rol.
 
 3. **Logs en producción (realtime)**
    - `realtime.ts` usa `console.log` para cada evento enviado y cada conexión/desconexión.
@@ -41,18 +41,17 @@
    - Se valida `if (!password || !email)` pero luego se busca por `username ? eq(users.username, username) : eq(users.email, email)`. El front actual solo envía email, así que funciona, pero la API acepta `username` en el body y no lo valida como alternativa.
    - **Mejora**: Dejar claro en la API: “login por email” o “por email o username”. Si es solo email, no usar `username` en la query; si se permite username, validar `email || username` en lugar de solo `!email`.
 
-9. **Register: mensaje de longitud**   // IMPLEMENTAR
+9. **Register: mensaje de longitud** ✅ Implementado
    - Mensaje de error dice “mín. 2 caracteres” pero la validación exige `username.length < 4` (mínimo 4).
    - **Mejora**: Unificar: o bien mínimo 2 y cambiar la condición, o bien mínimo 4 y corregir el mensaje a “mín. 4 caracteres”.
 
-10. **Orden en `games.ts`**    // IMPLEMENTAR
-    - La función `deleteGameChat` está definida antes de `import 'dotenv/config'` y de la creación de `db`; conceptualmente el archivo quedaría más claro con imports y creación de `db` al inicio y luego las funciones que lo usan.
+10. **Orden en `games.ts`** ✅ Implementado
+    - Reordenado: imports → constantes y alias (userX, userO, INITIAL_BOARD, LINES) → helpers puros (checkWinner, isDraw) → deleteGameChat (usa db) → gamesRoutes.
 
 ### Tipado
 
-11. **`request.body as any`**     // IMPLEMENTAR usar DTO login y response
-    - En varias rutas se hace cast a `any` para el body.
-    - **Mejora**: Definir interfaces (p. ej. `LoginBody`, `RegisterBody`, `MoveBody`) y usarlas en lugar de `any` para menos errores y mejor documentación.
+11. **`request.body as any`** ✅ Implementado
+    - Creado `src/types/dto.ts` con interfaces: `RegisterBody`, `LoginBody`, `UpdateProfileBody`, `TargetUsernameBody`, `ChatMessageBody`, `MoveBody`. Todas las rutas que leen body usan estos tipos en lugar de `any`.
 
 ---
 

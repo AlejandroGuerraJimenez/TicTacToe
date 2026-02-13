@@ -6,6 +6,7 @@ import bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
 import { users } from './db/schema';
 import { db } from './db/connection';
+import type { RegisterBody, LoginBody, UpdateProfileBody } from './types/dto';
 import { authenticate } from './plugins/auth';
 import { realtimePlugin } from './plugins/realtime';
 import { friendsRoutes } from './routes/friends';
@@ -49,13 +50,13 @@ server.register(friendsRoutes, { prefix: '/friends' });
 server.register(gamesRoutes, { prefix: '/games' });
 
 server.post('/register', async (request, reply) => {
-  const body = request.body as any;
+  const body = request.body as RegisterBody;
   const username = typeof body?.username === 'string' ? body.username.trim() : '';
   const email = typeof body?.email === 'string' ? body.email.trim() : '';
   const password = typeof body?.password === 'string' ? body.password : '';
 
   if (!username || username.length < 4) {
-    return reply.status(400).send({ success: false, error: 'El nombre de usuario es obligatorio (mín. 2 caracteres)' });
+    return reply.status(400).send({ success: false, error: 'El nombre de usuario es obligatorio (mín. 4 caracteres)' });
   }
   if (!email) {
     return reply.status(400).send({ success: false, error: 'El correo electrónico es obligatorio' });
@@ -95,7 +96,7 @@ server.post('/register', async (request, reply) => {
 
 // 4. Ruta de login (recuperar datos de una BD y validar contraseña)
 server.post('/login', async (request, reply) => {
-  const { username, email, password } = request.body as any;
+  const { username, email, password } = request.body as LoginBody;
 
   if (!password || !email) {
     return reply.status(400).send({ success: false, error: 'Faltan credenciales' });
@@ -153,7 +154,7 @@ server.patch('/me', {
   onRequest: [authenticate]
 }, async (request, reply) => {
   const userId = request.user.id;
-  const body = request.body as any;
+  const body = request.body as UpdateProfileBody;
   const username = typeof body?.username === 'string' ? body.username.trim() : '';
   const email = typeof body?.email === 'string' ? body.email.trim() : '';
 

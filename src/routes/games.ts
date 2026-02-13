@@ -3,20 +3,14 @@ import { authenticate } from '../plugins/auth';
 import { notifyUser } from '../plugins/realtime';
 import { users, games, gameInvitations, chats, messages, friendships } from '../db/schema';
 import { db } from '../db/connection';
+import type { TargetUsernameBody, ChatMessageBody, MoveBody } from '../types/dto';
 import { eq, and, desc, or } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 
-async function deleteGameChat(
-  chatId: number | null,
-  gameId: number
-): Promise<void> {
-  if (chatId == null) return;
-  await db.update(games).set({ chatId: null }).where(eq(games.id, gameId));
-  await db.delete(messages).where(eq(messages.chatId, chatId));
-  await db.delete(chats).where(eq(chats.id, chatId));
-}
+const userX = alias(users, 'userX');
+const userO = alias(users, 'userO');
 
 const INITIAL_BOARD = '---------';
-
 const LINES = [
   [0, 1, 2], [3, 4, 5], [6, 7, 8],
   [0, 3, 6], [1, 4, 7], [2, 5, 8],
@@ -31,45 +25,53 @@ function isDraw(board: string): boolean {
   return !board.includes('-');
 }
 
+async function deleteGameChat(chatId: number | null, gameId: number): Promise<void> {
+  if (chatId == null) return;
+  await db.update(games).set({ chatId: null }).where(eq(games.id, gameId));
+  await db.delete(messages).where(eq(messages.chatId, chatId));
+  await db.delete(chats).where(eq(chats.id, chatId));
+}
+
 export async function gamesRoutes(server: FastifyInstance) {
   server.addHook('onRequest', authenticate);
 
   // GET /games — listar juegos donde participo (iniciados / en curso / finalizados)
+  // GET /games — una sola query: partidas donde participo (X u O) con usernames de ambos jugadores
   server.get('/', async (request, reply) => {
     const userId = request.user.id;
     try {
-      const gamesAsX = await db
+      const rows = await db
         .select({
           id: games.id,
           status: games.status,
           playerTurn: games.playerTurn,
           winnerId: games.winnerId,
           createdAt: games.createdAt,
-          opponentId: games.playerOId,
-          opponentUsername: users.username,
+          playerXId: games.playerXId,
+          playerOId: games.playerOId,
+          usernameX: userX.username,
+          usernameO: userO.username,
         })
         .from(games)
-        .innerJoin(users, eq(games.playerOId, users.id))
-        .where(eq(games.playerXId, userId));
+        .innerJoin(userX, eq(games.playerXId, userX.id))
+        .innerJoin(userO, eq(games.playerOId, userO.id))
+        .where(or(eq(games.playerXId, userId), eq(games.playerOId, userId)))
+        .orderBy(desc(games.createdAt));
 
-      const gamesAsO = await db
-        .select({
-          id: games.id,
-          status: games.status,
-          playerTurn: games.playerTurn,
-          winnerId: games.winnerId,
-          createdAt: games.createdAt,
-          opponentId: games.playerXId,
-          opponentUsername: users.username,
-        })
-        .from(games)
-        .innerJoin(users, eq(games.playerXId, users.id))
-        .where(eq(games.playerOId, userId));
-
-      const list = [
-        ...gamesAsX.map((g) => ({ ...g, mySymbol: 'X' as const, youWon: g.status === 'FINISHED' && g.winnerId === userId })),
-        ...gamesAsO.map((g) => ({ ...g, mySymbol: 'O' as const, youWon: g.status === 'FINISHED' && g.winnerId === userId })),
-      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const list = rows.map((r) => {
+        const isX = r.playerXId === userId;
+        return {
+          id: r.id,
+          status: r.status,
+          playerTurn: r.playerTurn,
+          winnerId: r.winnerId,
+          createdAt: r.createdAt,
+          opponentId: isX ? r.playerOId : r.playerXId,
+          opponentUsername: (isX ? r.usernameO : r.usernameX) ?? '',
+          mySymbol: isX ? ('X' as const) : ('O' as const),
+          youWon: r.status === 'FINISHED' && r.winnerId === userId,
+        };
+      });
 
       return reply.status(200).send({ success: true, games: list });
     } catch (error) {
@@ -108,7 +110,7 @@ export async function gamesRoutes(server: FastifyInstance) {
 
   // POST /games/invite — enviar solicitud de juego { targetUsername: string }
   server.post('/invite', async (request, reply) => {
-    const { targetUsername } = request.body as { targetUsername: string };
+    const { targetUsername } = request.body as TargetUsernameBody;
     const senderId = request.user.id;
 
     if (!targetUsername?.trim()) {
@@ -340,7 +342,7 @@ export async function gamesRoutes(server: FastifyInstance) {
   // POST /games/:id/chat/messages — enviar mensaje (solo partidas en curso)
   server.post('/:id/chat/messages', async (request, reply) => {
     const gameId = Number((request.params as { id: string }).id);
-    const { content } = request.body as { content: string };
+    const { content } = request.body as ChatMessageBody;
     const userId = request.user.id;
     if (!Number.isInteger(gameId) || gameId < 1) {
       return reply.status(400).send({ success: false, error: 'Id inválido' });
@@ -441,7 +443,7 @@ export async function gamesRoutes(server: FastifyInstance) {
   // POST /games/:id/move — hacer jugada { position: number } (0-8)
   server.post('/:id/move', async (request, reply) => {
     const id = Number((request.params as { id: string }).id);
-    const { position } = request.body as { position: number };
+    const { position } = request.body as MoveBody;
     const userId = request.user.id;
 
     if (!Number.isInteger(id) || id < 1) {

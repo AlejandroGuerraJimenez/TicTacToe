@@ -3,6 +3,7 @@ import { authenticate } from '../plugins/auth';
 import { notifyUser } from '../plugins/realtime';
 import { users, friendships, friendRequests } from '../db/schema';
 import { db } from '../db/connection';
+import type { TargetUsernameBody } from '../types/dto';
 import { eq, and, or } from 'drizzle-orm';
 
 export async function friendsRoutes(server: FastifyInstance) {
@@ -13,14 +14,17 @@ export async function friendsRoutes(server: FastifyInstance) {
     // 1. Enviar solicitud de amistad
     // POST /friends/request { targetUsername: string }
     server.post('/request', async (request, reply) => {
-        const { targetUsername } = request.body as { targetUsername: string };
+        const { targetUsername } = request.body as TargetUsernameBody;
         const senderId = request.user.id;
+        const username = typeof targetUsername === 'string' ? targetUsername.trim() : '';
+        if (!username) {
+            return reply.status(400).send({ success: false, error: 'Falta targetUsername' });
+        }
 
         try {
             // Buscar usuario destino
-            const targetUsers = await db.select().from(users).where(eq(users.username, targetUsername));
+            const targetUsers = await db.select().from(users).where(eq(users.username, username));
             const targetUser = targetUsers[0];
-
             if (!targetUser) {
                 return reply.status(404).send({ success: false, error: 'Usuario no encontrado' });
             }
