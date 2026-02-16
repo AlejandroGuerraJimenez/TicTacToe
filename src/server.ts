@@ -33,6 +33,31 @@ const cookieOptions = {
   maxAge: 60 * 60 * 24 * 7,
 };
 
+/** Extrae un mensaje seguro para enviar en el payload (sin stack ni datos sensibles). */
+function getErrorDetail(error: any): string | undefined {
+  const cause = error?.cause;
+  if (cause?.message) return cause.message;
+  if (cause?.code) return String(cause.code);
+  if (error?.message && typeof error.message === 'string') {
+    return error.message.split('\n')[0].slice(0, 200);
+  }
+  return error?.code ? String(error.code) : undefined;
+}
+
+/**
+ * Objeto seguro para logging: evita imprimir query, params (contraseñas, emails) y stack.
+ * Solo incluye tipo de error y causa real (p. ej. ECONNREFUSED).
+ */
+function getSafeErrorForLog(error: any): Record<string, unknown> {
+  const cause = error?.cause;
+  const causeMessage = cause?.message ?? cause?.code;
+  return {
+    type: error?.type ?? error?.name ?? 'Error',
+    code: error?.code ?? cause?.code,
+    ...(causeMessage && { cause: typeof causeMessage === 'string' ? causeMessage.slice(0, 300) : causeMessage }),
+  };
+}
+
 // 1. Base de datos: una sola instancia compartida (véase db/connection.ts)
 
 // 2. Registro de plugins
@@ -78,10 +103,11 @@ server.post('/register', async (request, reply) => {
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
+    // Tabla "user": id (serial), username, email, password, created_at (default now). Solo enviamos los 3 obligatorios.
     const newUser = await db.insert(users).values({
       username,
       email,
-      password: hashedPassword
+      password: hashedPassword,
     }).returning();
 
     const { password: _pw, ...safeUser } = newUser[0];
@@ -91,13 +117,17 @@ server.post('/register', async (request, reply) => {
 
     return reply.status(201).send({ success: true, user: safeUser, token });
   } catch (error: any) {
-    server.log.error(error);
-    // Drizzle a veces envuelve el error de PostgreSQL en error.cause
+    server.log.error({ err: getSafeErrorForLog(error) }, 'Register failed');
     const pgCode = error?.code ?? error?.cause?.code;
     if (pgCode === '23505') {
       return reply.status(409).send({ success: false, error: 'El nombre de usuario o el correo ya están en uso' });
     }
-    return reply.status(500).send({ success: false, error: 'Error al crear la cuenta. Inténtalo de nuevo.' });
+    const detail = getErrorDetail(error);
+    return reply.status(500).send({
+      success: false,
+      error: 'Error al crear la cuenta. Inténtalo de nuevo.',
+      ...(detail && { errorDetail: detail }),
+    });
   }
 });
 
@@ -140,12 +170,17 @@ server.post('/login', async (request, reply) => {
 
     return reply.status(200).send({ success: true, user: safeUser, token }); // Devolvemos token explícitamente como pidió el usuario
   } catch (error: any) {
-    server.log.error(error);
+    server.log.error({ err: getSafeErrorForLog(error) }, 'Login failed');
     const pgCode = error?.code ?? error?.cause?.code;
     if (pgCode === '23505') {
       return reply.status(409).send({ success: false, error: 'Conflicto de datos' });
     }
-    return reply.status(500).send({ success: false, error: 'Error en el login. Comprueba que el backend tenga DATABASE_URL en Railway.' });
+    const detail = getErrorDetail(error);
+    return reply.status(500).send({
+      success: false,
+      error: 'Error en el login.',
+      ...(detail && { errorDetail: detail }),
+    });
   }
 });
 
@@ -211,9 +246,14 @@ server.patch('/me', {
     if (!updated) return reply.status(404).send({ success: false, error: 'Usuario no encontrado' });
 
     return reply.status(200).send({ success: true, user: updated });
-  } catch (error) {
-    server.log.error(error);
-    return reply.status(500).send({ success: false, error: 'Error al actualizar el perfil' });
+  } catch (error: any) {
+    server.log.error({ err: getSafeErrorForLog(error) }, 'Update profile failed');
+    const detail = getErrorDetail(error);
+    return reply.status(500).send({
+      success: false,
+      error: 'Error al actualizar el perfil',
+      ...(detail && { errorDetail: detail }),
+    });
   }
 });
 
@@ -227,8 +267,8 @@ server.post('/logout', async (_request, reply) => {
 const start = async () => {
   try {
     await server.listen({ port: 3000, host: '0.0.0.0' });
-  } catch (err) {
-    server.log.error(err);
+  } catch (err: any) {
+    server.log.error({ err: getSafeErrorForLog(err) }, 'Server listen failed');
     process.exit(1);
   }
 };
